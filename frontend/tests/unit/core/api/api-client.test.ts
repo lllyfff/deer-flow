@@ -260,3 +260,73 @@ test("falls back to join when preflight cannot resolve the run", async () => {
 
   expect(sessionStorage.removeItem).toHaveBeenCalledWith("lg:stream:thread-1");
 });
+
+test("proceeds to join when the run is still active", async () => {
+  // Positive path: a running/pending run must NOT be short-circuited — the
+  // preflight must let the real join through so an in-flight stream can be
+  // rejoined. Proves the guard does not over-eagerly skip active runs.
+  const sessionStorage = makeSessionStorage();
+  sessionStorage.setItem("lg:stream:thread-1", "run-1");
+  const fetchFn = rs.fn(async (url: string | URL) => {
+    const path = url.toString();
+    // Preflight GET reports an active run.
+    if (path.endsWith("/runs/run-1")) {
+      return new Response(JSON.stringify({ status: "running" }), {
+        status: 200,
+      });
+    }
+    // The real join is attempted (here it surfaces the inactive-stream 409,
+    // which the wrapper catches and clears the key — same path as production).
+    return new Response(
+      JSON.stringify({
+        detail: "Run run-1 is not active on this worker and cannot be streamed",
+      }),
+      { status: 409 },
+    );
+  });
+  rs.stubGlobal("window", {
+    location: { origin: "http://localhost:2026" },
+    sessionStorage,
+  });
+  rs.stubGlobal("fetch", fetchFn);
+
+  await expect(
+    getAPIClient(true).runs.joinStream("thread-1", "run-1").next(),
+  ).resolves.toMatchObject({ done: true });
+
+  // Two requests: preflight GET + the real join. A short-circuit would be one.
+  expect(fetchFn).toHaveBeenCalledTimes(2);
+  expect(sessionStorage.removeItem).toHaveBeenCalledWith("lg:stream:thread-1");
+});
+
+test("short-circuits reconnect to an interrupted (user-cancelled) run", async () => {
+  // Regression: interrupted is a persisted terminal status written by
+  // RunManager.cancel(). Reconnecting to it must short-circuit like other
+  // terminal states, otherwise — once the bridge is reaped — joinStream blocks
+  // forever and isLoading sticks. Keeps the frontend status set aligned with
+  // the backend RunStatus contract.
+  const sessionStorage = makeSessionStorage();
+  sessionStorage.setItem("lg:stream:thread-1", "run-1");
+  const fetchFn = rs.fn(async (url: string | URL) => {
+    const path = url.toString();
+    if (path.endsWith("/runs/run-1")) {
+      return new Response(JSON.stringify({ status: "interrupted" }), {
+        status: 200,
+      });
+    }
+    return new Response(JSON.stringify({ detail: "unexpected join" }), {
+      status: 500,
+    });
+  });
+  rs.stubGlobal("window", {
+    location: { origin: "http://localhost:2026" },
+    sessionStorage,
+  });
+  rs.stubGlobal("fetch", fetchFn);
+
+  const gen = getAPIClient(true).runs.joinStream("thread-1", "run-1");
+  await expect(gen.next()).resolves.toMatchObject({ done: true });
+
+  expect(fetchFn).toHaveBeenCalledTimes(1);
+  expect(sessionStorage.removeItem).toHaveBeenCalledWith("lg:stream:thread-1");
+});

@@ -40,11 +40,25 @@ function injectCsrfHeader(_url: URL, init: RequestInit): RequestInit {
 
 // Run statuses that have reached a terminal state where no further streaming
 // is possible. Reconnecting (``joinStream``) to such a run either 409s or, once
-// the backend's in-memory stream bridge is reaped, blocks forever on a drained
-// condition variable — pinning ``isLoading`` true so the submit button stays a
-// stop button and the first message after a reload never sends. The
-// ``joinStream`` wrapper below short-circuits these *before* joining.
-const TERMINAL_RUN_STATUSES = new Set(["success", "error", "timeout"]);
+// the backend's in-memory stream bridge is reaped (``worker.py`` calls
+// ``publish_end`` unconditionally, including for interrupted runs, then reaps
+// the bridge after 60s), blocks forever on a drained condition variable —
+// pinning ``isLoading`` true so the submit button stays a stop button and the
+// first message after a reload never sends. The ``joinStream`` wrapper below
+// short-circuits these *before* joining.
+//
+// ``interrupted`` is included because in DeerFlow it is only ever written by
+// ``RunManager.cancel()`` (a user-initiated stop); the resumable human-in-the-
+// loop path uses ``Command(goto=END)`` (``ClarificationMiddleware``), which
+// ends the run as ``success``, not ``interrupted``. So an interrupted run has
+// nothing left to stream — its state lives in the checkpoint, fetched
+// independently by ``useThreadHistory``, and resuming means a fresh ``submit``.
+const TERMINAL_RUN_STATUSES = new Set([
+  "success",
+  "error",
+  "timeout",
+  "interrupted",
+]);
 
 /**
  * Shared matcher for the gateway's 409 conflict responses. The SDK surfaces
