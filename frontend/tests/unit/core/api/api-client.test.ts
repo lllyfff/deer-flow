@@ -167,7 +167,9 @@ test("swallows terminal-state cancel 409 and clears stale key", async () => {
   );
 
   // Resolves (no throw) — cancelling an already-finished run is a no-op.
-  await expect(getAPIClient(true).runs.cancel("thread-1", "run-1")).resolves.toBeUndefined();
+  await expect(
+    getAPIClient(true).runs.cancel("thread-1", "run-1"),
+  ).resolves.toBeUndefined();
 
   expect(sessionStorage.removeItem).toHaveBeenCalledWith("lg:stream:thread-1");
 });

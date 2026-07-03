@@ -53,6 +53,13 @@ function injectCsrfHeader(_url: URL, init: RequestInit): RequestInit {
 // ends the run as ``success``, not ``interrupted``. So an interrupted run has
 // nothing left to stream — its state lives in the checkpoint, fetched
 // independently by ``useThreadHistory``, and resuming means a fresh ``submit``.
+//
+// ``error``/``timeout`` are terminal too, so a reload within the ~60s
+// bridge-reap window no longer replays the buffered error event through
+// ``onError`` — the transient error toast (``getStreamErrorMessage``) is
+// dropped. The persisted error state still loads from the checkpoint via
+// ``useThreadHistory``, so only the toast is lost; that is intentional, since
+// surfacing a stale error toast on every reload is noise rather than signal.
 const TERMINAL_RUN_STATUSES = new Set([
   "success",
   "error",
