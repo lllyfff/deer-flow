@@ -120,11 +120,11 @@ export function isRunNotCancellableError(error: unknown): boolean {
 }
 
 /**
- * Preflight a reconnect: if the run already reached a terminal state (or no
- * longer exists on this worker), there is nothing to rejoin. Returns ``true``
- * when the caller should skip the underlying ``joinStream`` so the SDK's
- * ``onSuccess`` path runs and ``isLoading`` flips back to false — instead of
- * blocking forever on a drained stream bridge.
+ * Preflight a reconnect: if the run already reached a terminal state, there is
+ * nothing to rejoin. Returns ``true`` when the caller should skip the
+ * underlying ``joinStream`` so the SDK's ``onSuccess`` path runs and
+ * ``isLoading`` flips back to false — instead of blocking forever on a drained
+ * stream bridge.
  *
  * Any error (404 for an evicted record, network blip, auth hiccup, …) falls
  * back to the original join so a legitimately active reconnect is never
